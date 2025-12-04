@@ -7,4 +7,7 @@ const repoName = 'poly-chat';
 export default defineConfig({
    base: `/${repoName}/`, 
   plugins: [react()],
+  build: {
+    outDir: 'docs',
+  }
 })
