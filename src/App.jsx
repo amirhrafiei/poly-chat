@@ -429,17 +429,7 @@ export default function App() {
   const [route, setRoute] = useState(window.location.hash.replace('#', '') || 'login');
 
   useEffect(() => {
-    if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/service-worker.js')
-      .then(registration => {
-        console.log('Service Worker registered:', registration);
-      })
-      .catch(error => {
-        console.error('Service Worker registration failed:', error);
-      });
-  });
-}
+  
     const handleHashChange = () => setRoute(window.location.hash.replace('#', '') || 'login');
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
