@@ -58,6 +58,21 @@ const Avatar = ({ url, name, size = 40, className = '' }) => {
   );
 };
 
+const formatTimestamp = (timestamp) => {
+    if (!timestamp || typeof timestamp.toDate !== 'function') {
+        return 'Sending...'; // Handle pending server timestamps
+    }
+    const date = timestamp.toDate();
+    const options = {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+        timeZoneName: 'short'
+    };
+    return date.toLocaleString(undefined, options);
+};
+
+
 /* ==========================================
   FIREBASE CONFIGURATION
   ==========================================
@@ -168,9 +183,11 @@ const generateAIResponse = async (userText, userName, lang, context) => {
     }
 };
 
+// ⭐ FIX: Added cancel() to clear hung requests
 const playGeminiTTS = async (text, langCode) => {
   const u = new SpeechSynthesisUtterance(text); 
   u.lang = langCode; 
+  window.speechSynthesis.cancel(); 
   window.speechSynthesis.speak(u);
 };
 
@@ -266,7 +283,7 @@ const STYLES = `
   
   /* Lobby/Search Grid */
   .lobby-view { padding: 40px; overflow-y: auto; flex: 1; width: 100%; background: linear-gradient(to bottom, #ffffff, #f9fafb); }
-  .lobby-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px; width: 100%; }
+  .lobby-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px; }
   .lobby-card { padding: 28px; border-radius: 24px; background: white; border: 1.5px solid #f3f4f6; box-shadow: 0 4px 6px rgba(0,0,0,0.02), 0 1px 3px rgba(0,0,0,0.01); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; display: flex; flex-direction: column; position: relative; overflow: hidden; }
   .lobby-card::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(5, 150, 105, 0.03) 0%, rgba(16, 185, 129, 0.03) 100%); opacity: 0; transition: opacity 0.3s; }
   .lobby-card:hover { transform: translateY(-6px); box-shadow: 0 20px 40px rgba(0,0,0,0.08), 0 8px 16px rgba(0,0,0,0.04); border-color: #d1fae5; }
@@ -296,7 +313,33 @@ const STYLES = `
   .msg-row.me .msg-bubble { background: linear-gradient(135deg, #dcfce7 0%, #d9fdd3 100%); color: #111; border-top-right-radius: 4px; border: 1px solid #bbf7d0; }
   .msg-row.them .msg-bubble { background: #ffffff; color: #111; border: 1px solid #e5e7eb; border-top-left-radius: 4px; }
   
-  .msg-meta { display: flex; align-items: center; justify-content: flex-end; margin-top: 6px; font-size: 0.7rem; opacity: 0.65; gap: 10px; }
+  /* ⭐ UPDATED STYLES FOR TIMESTAMP AND META ⭐ */
+  .msg-meta { 
+    display: flex; 
+    align-items: flex-end; 
+    justify-content: space-between; /* Separates Language/Original text from Time/Audio */
+    margin-top: 6px; 
+    font-size: 0.7rem; 
+    opacity: 0.8; 
+  }
+  .lang-meta-wrapper { 
+    display: flex; 
+    flex-direction: column; 
+    gap: 2px;
+    margin-right: 10px;
+  }
+  .time-audio-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px; /* Space between time and audio icon */
+  }
+  .timestamp-meta { 
+    font-size: 0.65rem; 
+    color: #9ca3af; 
+    font-weight: 500; 
+  }
+  /* END UPDATED STYLES */
+
   .msg-btn { cursor: pointer; opacity: 0.6; transition: all 0.2s; padding: 4px; border-radius: 6px; display: flex; align-items: center; }
   .msg-btn:hover { opacity: 1; background: rgba(0,0,0,0.05); transform: scale(1.1); }
   .correction-btn { position: absolute; top: -20px; right: -10px; background: #ffffff; color: #d97706; border: 1px solid #fcd34d; padding: 4px; border-radius: 50%; cursor: pointer; box-shadow: 0 4px 8px rgba(217, 119, 6, 0.2); z-index: 0; transition: all 0.2s; }
@@ -1122,11 +1165,30 @@ function ChatRoom({ user, channelId, targetLang, targetLangCode }) {
                  <p style={{margin:0, lineHeight:1.5, whiteSpace:'pre-wrap', cursor:'text'}} onContextMenu={e => handleLookup(e, msg.text)}>{msg.text}</p>
                  
                  <div className="msg-meta">
-                    <div style={{display:'flex', flexDirection:'column', gap:2, alignItems: isMe ? 'flex-end' : 'flex-start'}}>
-                       {msg.originalText && msg.originalText !== msg.text && <span style={{fontStyle:'italic'}}>"{msg.originalText}"</span>}
-                       {msg.lang && <span style={{fontWeight:'bold', fontSize:'0.65rem', textTransform:'uppercase'}}>{langFlag} {msg.lang}</span>}
+                    
+                    {/* 1. LEFT SIDE: Language Metadata */}
+                    <div className="lang-meta-wrapper" style={{alignItems: isMe ? 'flex-end' : 'flex-start'}}>
+                        {msg.originalText && msg.originalText !== msg.text && (
+                            <span style={{fontStyle:'italic', fontSize: '0.75rem', opacity: 0.8}}>
+                                "{msg.originalText}"
+                            </span>
+                        )}
+                        {msg.lang && (
+                            <span style={{fontWeight:'bold', fontSize:'0.65rem', textTransform:'uppercase'}}>
+                                {langFlag} {msg.lang}
+                            </span>
+                        )}
                     </div>
-                    <div className="msg-btn" onClick={() => handlePlayAudio(msg.text, msg.langCode, msg.id)}><Volume2 size={14}/></div>
+                    
+                    {/* 2. RIGHT SIDE: Timestamp + Audio Icon */}
+                    <div className="time-audio-wrapper">
+                        <span className="timestamp-meta">
+                            {formatTimestamp(msg.timestamp)}
+                        </span>
+                        <div className="msg-btn" onClick={() => handlePlayAudio(msg.text, msg.langCode, msg.id)}>
+                            <Volume2 size={14}/>
+                        </div>
+                    </div>
                  </div>
                </div>
              </div>
