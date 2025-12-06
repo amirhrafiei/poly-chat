@@ -192,61 +192,65 @@ const generateAIResponse = async (userText, userName, lang, context) => {
 };
 
 const playGeminiTTS = async (text, langCode) => {
-  try {
-    const response = await fetch(CLOUD_FUNCTION_BASE_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            action: 'playGeminiTTS',
-            text: text,
-            langCode: langCode
-        })
-    });
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  // try {
+  //   const response = await fetch(CLOUD_FUNCTION_BASE_URL, {
+  //       method: "POST",
+  //       headers: { "Content-Type": "application/json" },
+  //       body: JSON.stringify({
+  //           action: 'playGeminiTTS',
+  //           text: text,
+  //           langCode: langCode
+  //       })
+  //   });
+  //   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
-   const data = await response.json();
+  //  const data = await response.json();
     
-    // Check for error returned by the proxy itself
-    if (data.error) throw new Error(data.error);
+  //   // Check for error returned by the proxy itself
+  //   if (data.error) throw new Error(data.error);
 
-    const inlineData = data.inlineData;
+  //   const inlineData = data.inlineData;
     
-    if (inlineData && inlineData.data) {
-        // The proxy returns the whole inlineData object { mimeType, data (base64) }
-        const binaryString = window.atob(inlineData.data); 
+  //   if (inlineData && inlineData.data) {
+  //       // The proxy returns the whole inlineData object { mimeType, data (base64) }
+  //       const binaryString = window.atob(inlineData.data); 
         
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+  //       const bytes = new Uint8Array(binaryString.length);
+  //       for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
         
-        // Simple WAV header creation for the pcm data returned by the API
-        const sampleRate = 24000;
-        const numChannels = 1;
-        const bitsPerSample = 16;
-        const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
-        const blockAlign = numChannels * (bitsPerSample / 8);
+  //       // Simple WAV header creation for the pcm data returned by the API
+  //       const sampleRate = 24000;
+  //       const numChannels = 1;
+  //       const bitsPerSample = 16;
+  //       const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+  //       const blockAlign = numChannels * (bitsPerSample / 8);
         
-        const buffer = new ArrayBuffer(44 + bytes.length);
-        const view = new DataView(buffer);
+  //       const buffer = new ArrayBuffer(44 + bytes.length);
+  //       const view = new DataView(buffer);
         
-        const writeString = (v, o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  //       const writeString = (v, o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
         
-        // RIFF header
-        writeString(view, 0, 'RIFF'); view.setUint32(4, 36 + bytes.length, true); writeString(view, 8, 'WAVE');
-        // fmt sub-chunk
-        writeString(view, 12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); // Audio format 1 (PCM)
-        view.setUint16(22, numChannels, true); view.setUint32(24, sampleRate, true); view.setUint32(28, byteRate, true);
-        view.setUint16(32, blockAlign, true); view.setUint16(34, bitsPerSample, true); 
-        // data sub-chunk
-        writeString(view, 36, 'data'); view.setUint32(40, bytes.length, true);
+  //       // RIFF header
+  //       writeString(view, 0, 'RIFF'); view.setUint32(4, 36 + bytes.length, true); writeString(view, 8, 'WAVE');
+  //       // fmt sub-chunk
+  //       writeString(view, 12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); // Audio format 1 (PCM)
+  //       view.setUint16(22, numChannels, true); view.setUint32(24, sampleRate, true); view.setUint32(28, byteRate, true);
+  //       view.setUint16(32, blockAlign, true); view.setUint16(34, bitsPerSample, true); 
+  //       // data sub-chunk
+  //       writeString(view, 36, 'data'); view.setUint32(40, bytes.length, true);
         
-        new Uint8Array(buffer, 44).set(bytes);
-        new Audio(URL.createObjectURL(new Blob([buffer], { type: 'audio/wav' }))).play();
-    }
-  } catch (err) { 
-      console.error("TTS API Error, falling back to browser TTS:", err);
-      // Fallback to browser TTS
-      const u = new SpeechSynthesisUtterance(text); u.lang = langCode; window.speechSynthesis.speak(u);
-  }
+  //       new Uint8Array(buffer, 44).set(bytes);
+  //       new Audio(URL.createObjectURL(new Blob([buffer], { type: 'audio/wav' }))).play();
+  //   }
+  // } catch (err) { 
+  //     console.error("TTS API Error, falling back to browser TTS:", err);
+  //     // Fallback to browser TTS
+  //     const u = new SpeechSynthesisUtterance(text); u.lang = langCode; window.speechSynthesis.speak(u);
+  // }
+  console.log("Gemini TTS temporarily disabled for cost control. Using browser speech.");
+  const u = new SpeechSynthesisUtterance(text); 
+  u.lang = langCode; 
+  window.speechSynthesis.speak(u);
 };
 
 /* ==========================================
