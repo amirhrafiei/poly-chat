@@ -5,7 +5,6 @@ import {
   signInAnonymously,
   onAuthStateChanged,
   updateProfile,
-  signInWithCustomToken
 } from 'firebase/auth';
 import {
   getFirestore,
@@ -26,7 +25,7 @@ import {
 import { 
   Send, Loader2, Menu, X, Mic, Volume2, GraduationCap, 
   ArrowRight, CheckCircle2, AlertCircle, Users, Sparkles, 
-  BadgeCheck, Book, Star, Trash2, RefreshCw 
+  BadgeCheck, Book, Star, Trash2, RefreshCw
 } from 'lucide-react';
 
 /* ==========================================
@@ -96,17 +95,15 @@ const LANGUAGES = [
 ];
 
 const CLOUD_FUNCTION_BASE_URL = import.meta.env.VITE_CLOUD_FUNCTION_BASE_URL;
-/* --- API FUNCTIONS (UPDATED with Error Handling) --- */
+
+/* --- API FUNCTIONS --- */
 const translateText = async (text, targetLang) => {
   if (!text || !text.trim() || targetLang === 'English') return { translated: text, error: null };
   try {
     const response = await fetch(CLOUD_FUNCTION_BASE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({action: 'translate', 
-        text: text, 
-        targetLang: targetLang
-      })
+      body: JSON.stringify({action: 'translate', text, targetLang })
     });
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const data = await response.json();
@@ -123,10 +120,7 @@ const explainText = async (text) => {
     const response = await fetch(CLOUD_FUNCTION_BASE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'explain',
-        text: text,
-      })
+      body: JSON.stringify({ action: 'explain', text })
     });
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const data = await response.json();
@@ -142,14 +136,8 @@ const checkGrammar = async (text, lang) => {
     const response = await fetch(CLOUD_FUNCTION_BASE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'checkGrammar',
-        text: text, 
-        lang: lang 
-      })
+      body: JSON.stringify({ action: 'checkGrammar', text, lang })
     });
-    // The proxy function returns 200 even if the AI output is malformed JSON, 
-    // so we only check the HTTP status here.
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const data = await response.json();
     return { 
@@ -169,22 +157,11 @@ const generateAIResponse = async (userText, userName, lang, context) => {
         const response = await fetch(CLOUD_FUNCTION_BASE_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({action: 'generateAIResponse',
-            userText, 
-            userName, 
-            lang, 
-            context
-          })
+          body: JSON.stringify({action: 'generateAIResponse', userText, userName, lang, context })
         });
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const data = await response.json();
-        
-        // The proxy sends back an 'error' field if the AI fails to generate valid JSON
-        if (data.error) {
-            return { response: data.response, error: data.error };
-        }
-        
-        return { response: data.response, error: null };
+        return { response: data.response, error: data.error || null };
     } catch (err) { 
         console.error("AI Response API Error:", err);
         return { response: null, error: "AI failed to generate response." }; 
@@ -192,69 +169,27 @@ const generateAIResponse = async (userText, userName, lang, context) => {
 };
 
 const playGeminiTTS = async (text, langCode) => {
-  // try {
-  //   const response = await fetch(CLOUD_FUNCTION_BASE_URL, {
-  //       method: "POST",
-  //       headers: { "Content-Type": "application/json" },
-  //       body: JSON.stringify({
-  //           action: 'playGeminiTTS',
-  //           text: text,
-  //           langCode: langCode
-  //       })
-  //   });
-  //   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
-  //  const data = await response.json();
-    
-  //   // Check for error returned by the proxy itself
-  //   if (data.error) throw new Error(data.error);
-
-  //   const inlineData = data.inlineData;
-    
-  //   if (inlineData && inlineData.data) {
-  //       // The proxy returns the whole inlineData object { mimeType, data (base64) }
-  //       const binaryString = window.atob(inlineData.data); 
-        
-  //       const bytes = new Uint8Array(binaryString.length);
-  //       for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
-        
-  //       // Simple WAV header creation for the pcm data returned by the API
-  //       const sampleRate = 24000;
-  //       const numChannels = 1;
-  //       const bitsPerSample = 16;
-  //       const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
-  //       const blockAlign = numChannels * (bitsPerSample / 8);
-        
-  //       const buffer = new ArrayBuffer(44 + bytes.length);
-  //       const view = new DataView(buffer);
-        
-  //       const writeString = (v, o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
-        
-  //       // RIFF header
-  //       writeString(view, 0, 'RIFF'); view.setUint32(4, 36 + bytes.length, true); writeString(view, 8, 'WAVE');
-  //       // fmt sub-chunk
-  //       writeString(view, 12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); // Audio format 1 (PCM)
-  //       view.setUint16(22, numChannels, true); view.setUint32(24, sampleRate, true); view.setUint32(28, byteRate, true);
-  //       view.setUint16(32, blockAlign, true); view.setUint16(34, bitsPerSample, true); 
-  //       // data sub-chunk
-  //       writeString(view, 36, 'data'); view.setUint32(40, bytes.length, true);
-        
-  //       new Uint8Array(buffer, 44).set(bytes);
-  //       new Audio(URL.createObjectURL(new Blob([buffer], { type: 'audio/wav' }))).play();
-  //   }
-  // } catch (err) { 
-  //     console.error("TTS API Error, falling back to browser TTS:", err);
-  //     // Fallback to browser TTS
-  //     const u = new SpeechSynthesisUtterance(text); u.lang = langCode; window.speechSynthesis.speak(u);
-  // }
-  console.log("Gemini TTS temporarily disabled for cost control. Using browser speech.");
   const u = new SpeechSynthesisUtterance(text); 
   u.lang = langCode; 
   window.speechSynthesis.speak(u);
 };
 
+const createDmNotification = async (senderUid, recipientUid) => {
+  if (senderUid === recipientUid) return;
+  try {
+    const dmNotificationRef = doc(db, 'artifacts', appId, 'users', recipientUid, 'dm_notifications', senderUid);
+    await setDoc(dmNotificationRef, {
+        senderUid: senderUid,
+        timestamp: serverTimestamp(),
+        trigger: Date.now() 
+    }, { merge: true });
+  } catch (error) {
+    console.error("Failed to create DM notification:", error);
+  }
+};
+
 /* ==========================================
-  CSS STYLES (Soft & Airy)
+  CSS STYLES
   ==========================================
 */
 const STYLES = `
@@ -267,7 +202,6 @@ const STYLES = `
   
   /* Layout */
   .app-container { display: flex; height: 100vh; width: 100vw; overflow: hidden; background: linear-gradient(135deg, #f0f9ff 0%, #f0fdf4 100%); }
-  /* Fix: main-area needs to prevent overflow to allow children to scroll properly */
   .main-area { flex: 1; display: flex; flex-direction: column; position: relative; min-width: 0; background: linear-gradient(to bottom, #ffffff 0%, #f9fafb 100%); height: 100%; box-shadow: -2px 0 10px rgba(0,0,0,0.02); }
   
   /* Sidebar */
@@ -291,9 +225,29 @@ const STYLES = `
   .nav-icon { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 10px; background: #f3f4f6; color: #666; font-size: 0.8rem; font-weight: bold; flex-shrink: 0; transition: all 0.2s; }
   .nav-btn.active .nav-icon { background: linear-gradient(135deg, #059669 0%, #047857 100%); color: #fff; box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3); }
   .nav-btn:hover .nav-icon { background: #e5e7eb; }
-  .delete-icon { opacity: 0; transition: all 0.2s; color: #ef4444; padding: 6px; border-radius: 8px; z-index: 2; position: relative; }
+  
+  /* Right side Nav Actions (Badge + Delete) */
+  .nav-right { display: flex; align-items: center; gap: 8px; position: relative; z-index: 2; }
+  
+  .delete-icon { opacity: 0; transition: all 0.2s; color: #ef4444; padding: 6px; border-radius: 8px; display: flex; align-items: center; }
   .delete-icon:hover { background: #fee2e2; transform: scale(1.1); }
   .nav-btn:hover .delete-icon { opacity: 1; }
+  
+  .unread-badge { 
+    background: #016747ff; 
+    color: white; 
+    font-size: 0.75rem; 
+    font-weight: 700; 
+    min-width: 20px; 
+    height: 20px; 
+    border-radius: 10px; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center;
+    padding: 0 6px;
+    box-shadow: 0 2px 5px rgba(239, 68, 68, 0.3);
+  }
+  .nav-btn.active .unread-badge { background: white; color: #059669; border: 1px solid #d1fae5; }
 
   /* Headers */
   .header { height: 70px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; background: white; z-index: 10; box-shadow: 0 1px 3px rgba(0,0,0,0.04); flex-shrink: 0; backdrop-filter: blur(10px); }
@@ -326,7 +280,6 @@ const STYLES = `
   .meta-label { font-weight: 700; color: #9ca3af; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; }
   
   /* Chat Area */
-  /* Fix: Ensure chat view takes up exactly the available height and doesn't push out */
   .chat-view { flex: 1; display: flex; flex-direction: column; height: 100%; width: 100%; background: #fff; overflow: hidden; min-height: 0; position: relative; }
   .chat-messages { flex: 1; overflow-y: auto; padding: 28px; display: flex; flex-direction: column; gap: 16px; background: linear-gradient(to bottom, #fafafa, #ffffff); }
   .load-more-btn { width: 100%; padding: 10px; font-size: 0.85rem; color: #9ca3af; display: flex; justify-content: center; align-items: center; gap: 8px; transition: all 0.2s; border-radius: 12px; font-weight: 500; }
@@ -337,7 +290,7 @@ const STYLES = `
   .msg-row.me { justify-content: flex-end; }
   .msg-avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: bold; background: #f4f4f5; color: #666; flex-shrink: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
   
-  /* BUBBLES - Enhanced WhatsApp Style */
+  /* BUBBLES */
   .msg-bubble { max-width: 75%; padding: 12px 16px; border-radius: 16px; position: relative; font-size: 0.95rem; line-height: 1.5; box-shadow: 0 2px 8px rgba(0,0,0,0.08); transition: all 0.2s; }
   .msg-bubble:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.12); transform: translateY(-1px); }
   .msg-row.me .msg-bubble { background: linear-gradient(135deg, #dcfce7 0%, #d9fdd3 100%); color: #111; border-top-right-radius: 4px; border: 1px solid #bbf7d0; }
@@ -361,7 +314,6 @@ const STYLES = `
   .popup-btn:hover { opacity: 0.95; transform: translateY(-2px); box-shadow: 0 6px 16px rgba(5, 150, 105, 0.3); }
 
   /* Input Area */
-  /* Fix: Flex-shrink 0 keeps it from collapsing, sticky positioning ensures it stays put */
   .input-area { padding: 20px 24px; background: linear-gradient(to bottom, #f9fafb, #ffffff); display: flex; flex-direction: column; gap: 16px; border-top: 1.5px solid #e5e7eb; flex-shrink: 0; box-shadow: 0 -2px 10px rgba(0,0,0,0.02); }
   .input-toggles { display: flex; justify-content: center; gap: 12px; margin-bottom: 8px; }
   .toggle-btn { padding: 10px 20px; border-radius: 99px; font-size: 0.85rem; font-weight: 600; border: 1.5px solid #e5e7eb; color: #6b7280; background: #fff; transition: all 0.2s; }
@@ -402,7 +354,7 @@ const STYLES = `
     .notebook-view { padding: 24px; }
     .hidden-md { display: flex; }
     .desktop-header { display: none; }
-    .mobile-menu-btn { display: block; } /* VISIBLE ON MOBILE */
+    .mobile-menu-btn { display: block; }
   }
   @media (min-width: 769px) {
     .sidebar { position: relative; margin-left: 0 !important; }
@@ -443,7 +395,6 @@ const usePartnerStatus = (partnerId) => {
         setPartnerData(data);
         const lastActiveTime = data.lastActive?.toDate().getTime();
         if (lastActiveTime) {
-          // Check if last active was within the last 5 minutes (300,000 ms)
           setIsOnline(Date.now() - lastActiveTime < 300000);
         } else {
           setIsOnline(false);
@@ -471,7 +422,6 @@ export default function App() {
   const [route, setRoute] = useState(window.location.hash.replace('#', '') || 'login');
 
   useEffect(() => {
-  
     const handleHashChange = () => setRoute(window.location.hash.replace('#', '') || 'login');
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
@@ -491,7 +441,6 @@ export default function App() {
 
   useEffect(() => {
     if (loadingAuth) return;
-    // Route logic updated to default to 'user-search' instead of 'chat'
     if (user?.displayName && userData) { if (route === 'login') window.location.hash = 'user-search'; } 
     else { if (route !== 'login') window.location.hash = 'login'; }
   }, [user, loadingAuth, route, userData]);
@@ -557,29 +506,109 @@ function LoginScreen({ user }) {
 }
 
 function MainLayout({ user, userData }) {
-  // Changed default channel to 'user-search' and removed 'lobby'
-  const [joinedChannels, setJoinedChannels] = useState(() => JSON.parse(localStorage.getItem('poly_channels') || '["user-search"]'));
+  const [targetLang, setTargetLang] = useState(userData?.targetLang || 'Spanish');
+  const [targetLangCode, setTargetLangCode] = useState(
+      LANGUAGES.find(l => l.name === (userData?.targetLang || 'Spanish'))?.code || 'es-ES'
+  );
+
+  const [joinedChannels, setJoinedChannels] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('poly_channels') || '[]');
+      if (!Array.isArray(saved)) return [{id: 'user-search', name: 'Find User', isDm: false }];
+      return saved.filter(c => typeof c === 'object' && c !== null).map(c => ({...c, unread: c.unread || false}));
+    } catch (e) {
+      return [];
+    }
+  });
+  
   const [activeChannelId, setActiveChannelId] = useState('user-search');
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [targetLang, setTargetLang] = useState(userData.targetLang || 'Spanish');
-  const [targetLangCode, setTargetLangCode] = useState(LANGUAGES.find(l => l.name === (userData.targetLang || 'Spanish'))?.code || 'es-ES');
-
+  
+  // Persist channels, but don't blindly rely on them for logic (state is truth)
   useEffect(() => localStorage.setItem('poly_channels', JSON.stringify(joinedChannels)), [joinedChannels]);
+  
+  // Heartbeat
   useEffect(() => {
+    if (!user || !user.uid) return;
     const beat = async () => { try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', user.uid), { lastActive: serverTimestamp() }, { merge: true }); } catch (e) {} };
     beat(); const i = setInterval(beat, 60000); return () => clearInterval(i);
   }, [user]);
 
+  // ⭐ FIXED: Robust DM Notification Listener
+  useEffect(() => {
+    if (!user || !user.uid) return;
+
+    const notificationCollectionRef = collection(db, 'artifacts', appId, 'users', user.uid, 'dm_notifications');
+    
+    const unsubscribe = onSnapshot(notificationCollectionRef, (snapshot) => {
+      snapshot.docChanges().forEach(async (change) => {
+        const notificationDoc = change.doc;
+        const partnerUid = notificationDoc.id;
+        
+        if (change.type === 'added' || change.type === 'modified') {
+          const dmId = `dm_${[user.uid, partnerUid].sort().join('_')}`;
+
+          // 1. Fetch data FIRST (Async with fallback)
+          let partnerName = 'Unknown User';
+          try {
+             const partnerDoc = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', partnerUid));
+             if (partnerDoc.exists()) partnerName = partnerDoc.data().displayName;
+          } catch(e) {
+             console.error("Failed to fetch partner name", e);
+          }
+
+          // 2. Update state SYNCHRONOUSLY using Filter & Prepend to prevent duplicates
+          setJoinedChannels(prevChannels => {
+            const others = prevChannels.filter(c => c.id !== dmId);
+            
+            // If we are currently LOOKING at this chat, don't mark it unread
+            const isCurrentlyOpen = activeChannelId === dmId;
+
+            // Use existing name if we already have it to avoid flickering, otherwise use fetched
+            const existingChannel = prevChannels.find(c => c.id === dmId);
+            const nameToUse = existingChannel ? existingChannel.name : partnerName;
+
+            return [{ 
+                id: dmId, 
+                name: nameToUse, 
+                isDm: true, 
+                unread: !isCurrentlyOpen 
+            }, ...others];
+          });
+
+          // 3. Delete the notification document so it can be re-triggered later
+          try {
+              await deleteDoc(notificationDoc.ref);
+          } catch(e) {
+              console.error("Error deleting notification", e);
+          }
+        }
+      });
+    });
+
+    return () => unsubscribe();
+  }, [user.uid, activeChannelId]); 
+  
+  
   const startDM = (id, name) => {
     if (id === 'ai') { setActiveChannelId('ai'); setSidebarOpen(false); return; }
+    if (id === 'notebook') { setActiveChannelId('notebook'); setSidebarOpen(false); return; }
+    
+    // Generate consistent ID
     const dmId = `dm_${[user.uid, id].sort().join('_')}`;
-    if (!joinedChannels.some(c => c.id === dmId)) setJoinedChannels(prev => [...prev, { id: dmId, name, isDm: true }]);
+
+    // Filter & Prepend to avoid duplicates and move to top
+    setJoinedChannels(prev => {
+        const others = prev.filter(c => c.id !== dmId);
+        return [{ id: dmId, name, isDm: true, unread: false }, ...others];
+    });
+
     setActiveChannelId(dmId); setSidebarOpen(false);
   };
+  
   const deleteDM = (id) => { 
     if (window.confirm('Delete chat?')) { 
       setJoinedChannels(prev => prev.filter(c => c.id !== id)); 
-      // Changed fallback channel to 'user-search'
       if (activeChannelId === id) setActiveChannelId('user-search'); 
     } 
   };
@@ -593,7 +622,7 @@ function MainLayout({ user, userData }) {
   };
 
   const getName = (id) => {
-    if (id === 'user-search') return 'Find User'; // New title
+    if (id === 'user-search') return 'Find User'; 
     if (id === 'ai') return 'Poly';
     if (id === 'notebook') return 'My Notebook';
     const c = joinedChannels.find(c => c.id === id);
@@ -603,27 +632,30 @@ function MainLayout({ user, userData }) {
   return (
     <div className="app-container">
       <div className={`sidebar ${sidebarOpen ? 'open' : 'closed'} mobile-sidebar`}>
-        {/* <div className="sidebar-header"><PolyLogo style={{width:28, height:28, marginRight:12, color:'#059669'}}/> Poly</div> */}
         <div className="sidebar-content">
           <div className="sidebar-section">Explore</div>
           
-          {/* NEW: Find User Button (Replaces Lobby) */}
           <button className={`nav-btn ${activeChannelId === 'user-search' ? 'active' : ''}`} onClick={() => {setActiveChannelId('user-search'); setSidebarOpen(false);}}>
             <div className="nav-content"><div className="nav-icon"><Users size={16}/></div> Find User</div>
           </button>
 
           <button className={`nav-btn ${activeChannelId === 'ai' ? 'active' : ''}`} onClick={() => {setActiveChannelId('ai'); setSidebarOpen(false);}}>
             <div className="nav-content"><div className="nav-icon"><PolyLogo size={16}/></div> Poly</div>
-            <div className="delete-icon" onClick={(e) => { e.stopPropagation(); resetAIChat(); }} title="Reset AI Chat"><Trash2 size={14}/></div>
+            <div className="nav-right">
+               <div className="delete-icon" onClick={(e) => { e.stopPropagation(); resetAIChat(); }} title="Reset AI Chat"><Trash2 size={14}/></div>
+            </div>
           </button>
           <button className={`nav-btn ${activeChannelId === 'notebook' ? 'active' : ''}`} onClick={() => {setActiveChannelId('notebook'); setSidebarOpen(false);}}>
              <div className="nav-content"><div className="nav-icon"><Book size={16}/></div> Notebook</div>
           </button>
           <div className="sidebar-section">Chats</div>
           {joinedChannels.filter(c => c.isDm).map(c => (
-            <button key={c.id} className={`nav-btn ${activeChannelId === c.id ? 'active' : ''}`} onClick={() => {setActiveChannelId(c.id); setSidebarOpen(false);}}>
+            <button key={c.id} className={`nav-btn ${activeChannelId === c.id ? 'active' : ''}`} onClick={() => {startDM(c.id.replace('dm_', '').split('_').find(u => u !== user.uid), c.name); setSidebarOpen(false);}}>
               <div className="nav-content"><Avatar name={c.name} size={32}/> <span style={{marginLeft:8}}>{c.name}</span></div>
-              <div className="delete-icon" onClick={(e) => { e.stopPropagation(); deleteDM(c.id); }}><Trash2 size={14}/></div>
+              <div className="nav-right">
+                  {c.unread && <span className="unread-badge">1</span>}
+                  <div className="delete-icon" onClick={(e) => { e.stopPropagation(); deleteDM(c.id); }}><Trash2 size={14}/></div>
+              </div>
             </button>
           ))}
         </div>
@@ -640,9 +672,8 @@ function MainLayout({ user, userData }) {
           <div className="header-title">
              <button onClick={() => setSidebarOpen(true)} className="menu-btn mobile-menu-btn"><Menu size={24}/></button>
              {getName(activeChannelId)}
-             {(activeChannelId.startsWith('dm_') || activeChannelId=='ai') && <OnlineStatus channelId={activeChannelId} userUid={user.uid} />}
+             {(activeChannelId.startsWith('dm_') || activeChannelId==='ai') && <OnlineStatus channelId={activeChannelId} userUid={user.uid} />}
           </div>
-          {/* Hide Language Selector on Find User and Notebook screens */}
           {activeChannelId !== 'notebook' && activeChannelId !== 'user-search' && (
              <LanguageSelector current={targetLang} onChange={(n, c) => { setTargetLang(n); setTargetLangCode(c); }} />
           )}
@@ -652,8 +683,7 @@ function MainLayout({ user, userData }) {
           <div className="header desktop-header">
             <div className="header-title">
                 {getName(activeChannelId)}
-                {/* Online Status for DMs in Header */}
-                {(activeChannelId.startsWith('dm_') || activeChannelId=='ai') && <OnlineStatus channelId={activeChannelId} userUid={user.uid} />}
+                {(activeChannelId.startsWith('dm_') || activeChannelId==='ai') && <OnlineStatus channelId={activeChannelId} userUid={user.uid} />}
             </div>
             {activeChannelId !== 'notebook' && (
               <LanguageSelector current={targetLang} onChange={(n, c) => { setTargetLang(n); setTargetLangCode(c); }} />
@@ -662,7 +692,7 @@ function MainLayout({ user, userData }) {
         )}
 
         {activeChannelId === 'user-search' 
-          ? <UserSearchScreen user={user} onStartDM={startDM} /> // Renders new search screen
+          ? <UserSearchScreen user={user} onStartDM={startDM} /> 
           : activeChannelId === 'notebook'
              ? <NotebookScreen user={user} />
              : <ChatRoom key={activeChannelId} user={user} channelId={activeChannelId} targetLang={targetLang} targetLangCode={targetLangCode} />
@@ -706,7 +736,7 @@ function LanguageSelector({ current, onChange }) {
 }
 
 /* ==========================================
-  NEW: UserSearchScreen Component
+  UserSearchScreen Component
   ==========================================
 */
 function UserSearchScreen({ user, onStartDM }) {
@@ -728,7 +758,6 @@ function UserSearchScreen({ user, onStartDM }) {
     setResults([]);
 
     try {
-      // Basic prefix search: displayName >= searchTerm AND displayName < searchTerm + '\uf8ff'
       const prefix = searchTerm.trim();
       const q = query(
         collection(db, 'artifacts', appId, 'public', 'data', 'users'),
@@ -740,7 +769,7 @@ function UserSearchScreen({ user, onStartDM }) {
       const snapshot = await getDocs(q);
       const userList = snapshot.docs
         .map(d => ({ id: d.id, ...d.data() }))
-        .filter(u => u.id !== user.uid); // Filter out current user
+        .filter(u => u.id !== user.uid); 
 
       setResults(userList);
     } catch (error) {
@@ -774,11 +803,10 @@ function UserSearchScreen({ user, onStartDM }) {
         </div>
       </form>
       
-      {/* --- 1. Search Results --- */}
       {results.length > 0 && (
         <>
           <h3 style={{fontSize:'1.1rem', fontWeight:600, color:'#374151', margin:'30px 0 15px'}}>Search Results</h3>
-          <div className="lobby-grid" style={{ marginBottom: 40 }}> {/* Added margin-bottom for spacing */}
+          <div className="lobby-grid" style={{ marginBottom: 40 }}> 
             {results.map(u => (
               <div key={u.id} className="lobby-card" onClick={(e) => { e.stopPropagation(); onStartDM(u.id, u.displayName); }}>
                 <div className="card-header">
@@ -797,12 +825,10 @@ function UserSearchScreen({ user, onStartDM }) {
         </>
       )}
 
-      {/* No results message: Only show if searched AND no results AND not loading */}
       {searched && results.length === 0 && !loading && (
         <p style={{color:'#9ca3af', textAlign:'center', marginTop:30, marginBottom: 40}}>No users found matching "{searchTerm.trim()}".</p>
       )}
 
-      {/* --- 2. AI Companion Card (Moved to bottom) --- */}
       <h3 style={{fontSize:'1.1rem', fontWeight:600, color:'#374151', margin:'30px 0 15px'}}>Meet Poly</h3>
       <div className="lobby-grid">
            <div className="lobby-card" onClick={() => onStartDM('ai', 'Poly')} style={{background:'#fff'}}>
@@ -850,7 +876,7 @@ function NotebookScreen({ user }) {
 }
 
 /* ==========================================
-  NEW: PolyContextSelector Component
+  PolyContextSelector Component
   ==========================================
 */
 const TOPICS = [
@@ -897,6 +923,7 @@ function PolyContextSelector({ topic, setTopic, grammarFocus, setGrammarFocus, t
         </div>
     );
 }
+
 /* ==========================================
   CHAT ROOM
   ==========================================
@@ -907,12 +934,14 @@ function ChatRoom({ user, channelId, targetLang, targetLangCode }) {
   const [lookup, setLookup] = useState(null);
   const [activeCorrection, setActiveCorrection] = useState(null);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [apiError, setApiError] = useState(null); // API Error state
-  const [aiTopic, setAiTopic] = useState(TOPICS[0]); // AI Context state
-  const [grammarFocus, setGrammarFocus] = useState(GRAMMAR_FOCUS[0]); // AI Context state
+  const [apiError, setApiError] = useState(null); 
+  const [aiTopic, setAiTopic] = useState(TOPICS[0]); 
+  const [grammarFocus, setGrammarFocus] = useState(GRAMMAR_FOCUS[0]); 
   const scrollRef = useRef(null);
+  const isDm = channelId.startsWith('dm_');
+  const partnerUid = isDm ? channelId.replace('dm_', '').split('_').find(id => id !== user.uid) : null;
+  const isFirstMessage = useRef(true);
 
-  // Save to Notebook Logic
   const saveToNotebook = async (word, def) => {
     await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'vocab'), {
       word, definition: def, timestamp: serverTimestamp(), lang: targetLang
@@ -925,10 +954,18 @@ function ChatRoom({ user, channelId, targetLang, targetLangCode }) {
     if (channelId === 'ai') ref = collection(db, 'artifacts', appId, 'users', user.uid, 'ai_messages');
     else ref = collection(db, 'artifacts', appId, 'public', 'data', `chat_${channelId.replace(/[^a-z0-9-_]/g, '')}`);
     const q = query(ref, orderBy('timestamp', 'desc'), limit(limitCount));
-    return onSnapshot(q, (snap) => {
-      setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })).reverse());
+    
+    const unsubscribe = onSnapshot(q, (snap) => {
+      const newMessages = snap.docs.map(d => ({ id: d.id, ...d.data() })).reverse();
+      setMessages(newMessages);
       setLoadingMore(false);
+      
+      if (isFirstMessage.current && newMessages.length > 0) {
+          isFirstMessage.current = false;
+      }
     });
+
+    return () => unsubscribe();
   }, [user, channelId, limitCount]);
 
   useEffect(() => { if(limitCount === 20 && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [messages, limitCount]);
@@ -937,7 +974,7 @@ function ChatRoom({ user, channelId, targetLang, targetLangCode }) {
 
   const handleLookup = async (e, text) => {
     e.preventDefault(); e.stopPropagation();
-    setApiError(null); // Clear previous error
+    setApiError(null); 
     const selection= window.getSelection().toString().trim();
     const lookupText= selection.length >0 ? selection: text;
     const rect= e.currentTarget.getBoundingClientRect();
@@ -950,7 +987,7 @@ function ChatRoom({ user, channelId, targetLang, targetLangCode }) {
   };
 
   const handleSend = async (text, raw, isPractice) => {
-    setApiError(null); // Clear previous error
+    setApiError(null); 
     let correctionData = null;
     let finalError = null;
 
@@ -959,7 +996,7 @@ function ChatRoom({ user, channelId, targetLang, targetLangCode }) {
        if (check.error) { finalError = check.error; }
        if (check.hasError) {
             correctionData = { 
-                correction: check.correction || text, // Fallback to original text if correction is missing
+                correction: check.correction || text, 
                 reason: check.reason || "Grammar check found a potential issue." 
             };
         }
@@ -967,10 +1004,9 @@ function ChatRoom({ user, channelId, targetLang, targetLangCode }) {
     
     if (finalError) { setApiError(finalError); return; }
 
-    // Use null for correction if no error was found, or the structured data
     const msgData = { 
       text, 
-      originalText: raw || "", // Safely fallback 'raw' to empty string
+      originalText: raw || "", 
       userId: user.uid, 
       displayName: user.displayName, 
       timestamp: serverTimestamp(), 
@@ -985,8 +1021,11 @@ function ChatRoom({ user, channelId, targetLang, targetLangCode }) {
     else ref = collection(db, 'artifacts', appId, 'public', 'data', `chat_${channelId.replace(/[^a-z0-9-_]/g, '')}`);
     
     try {
-        // Save the user's message
         await addDoc(ref, msgData);
+        // ⭐ FIXED: Always send notification to ensure receiver gets the chat
+        if (isDm && partnerUid) {
+            await createDmNotification(user.uid, partnerUid);
+        }
     } catch (e) {
         setApiError("Failed to send message to database.");
         return;
@@ -998,7 +1037,6 @@ function ChatRoom({ user, channelId, targetLang, targetLangCode }) {
 
        if (error) { 
            setApiError(error); 
-           // If AI generation fails, log the error and use a fallback response
            await addDoc(ref, { 
                 text: "Poly is temporarily unavailable.", 
                 originalText: "Poly is temporarily unavailable.", 
@@ -1012,7 +1050,6 @@ function ChatRoom({ user, channelId, targetLang, targetLangCode }) {
        }
        
        if (response) { 
-            // ✅ FIX APPLIED HERE: Ensure 'text' and 'originalText' are strings or a message
             await addDoc(ref, { 
                 text: response.target || "Poly had trouble translating the response.", 
                 originalText: response.english || "Poly had trouble generating the response.", 
@@ -1027,15 +1064,12 @@ function ChatRoom({ user, channelId, targetLang, targetLangCode }) {
   };
 
   const handlePlayAudio = async (text, langCode, msgId) => {
-    // setPlayingId(msgId); // Optional: tracking state
     await playGeminiTTS(text, langCode);
-    // setPlayingId(null);
   };
 
   return (
     <div className="chat-view" onClick={() => { setLookup(null); setActiveCorrection(null); }}>
       
-      {/* AI Context Selector */}
       {channelId === 'ai' && (
           <PolyContextSelector 
               topic={aiTopic} setTopic={setAiTopic} 
@@ -1044,7 +1078,6 @@ function ChatRoom({ user, channelId, targetLang, targetLangCode }) {
           />
       )}
       
-      {/* API Error Alert */}
       {apiError && (
           <div style={{ padding: '10px 24px', background: '#fee2e2', color: '#dc2626', fontWeight: 600, borderBottom: '1px solid #fca5a5', display:'flex', alignItems:'center', gap: 8 }}>
               <AlertCircle size={16}/> {apiError}
@@ -1102,7 +1135,6 @@ function ChatRoom({ user, channelId, targetLang, targetLangCode }) {
         })}
       </div>
       
-      {/* Auto-focus implemented via key={channelId} in MainLayout */}
       <ChatInput key={channelId} onSend={handleSend} targetLang={targetLang} />
     </div>
   );
@@ -1116,18 +1148,16 @@ function ChatInput({ onSend, targetLang }) {
   const timer = useRef(null);
   const textareaRef = useRef(null);
   
-  // Auto-focus logic
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.focus();
     }
-  }, []); // Runs on component mount/remount
+  }, []);
 
   const handleChange = (e) => {
     const val = e.target.value;
     setInput(val);
     
-    // Auto-resize logic
     if (textareaRef.current) {
        textareaRef.current.style.height = 'auto'; 
        textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
@@ -1142,7 +1172,10 @@ function ChatInput({ onSend, targetLang }) {
   };
 
   const send = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) {
+        e.preventDefault(); 
+    }
+    
     if (!input.trim() || loading) return;
     setLoading(true);
     let txt = input;
@@ -1150,11 +1183,15 @@ function ChatInput({ onSend, targetLang }) {
     
     if (mode === 'english' && targetLang !== 'English') {
         const { translated, error } = await translateText(input, targetLang);
-        if (error) { setLoading(false); onSend('', '', false); return; } // Stop send process if translation fails
+        if (error) { 
+            setLoading(false); 
+            await onSend('', '', false); 
+            return; 
+        } 
         txt = translated;
     }
     
-    await onSend(txt, input, practice); // Let ChatRoom handle DB and AI API errors
+    await onSend(txt, input, practice); 
     setInput(''); 
     setLoading(false);
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
@@ -1194,7 +1231,7 @@ function ChatInput({ onSend, targetLang }) {
               <div className="status-indicator"><Loader2 className="spin" size={12} style={{marginRight:6}}/> Translating...</div>
            )}
         </div>
-        <button className="send-btn" disabled={loading || !input.trim()}>{loading ? <Loader2 className="spin"/> : <Send size={20}/>}</button>
+        <button type="submit" className="send-btn" disabled={loading || !input.trim()}>{loading ? <Loader2 className="spin"/> : <Send size={20}/>}</button>
       </form>
     </div>
   );
