@@ -95,7 +95,7 @@ const LANGUAGES = [
   { code: 'hi-IN', name: 'Hindi', flag: '🇮🇳' },
 ];
 
-const CLOUD_FUNCTION_BASE_URL = import.meta.env.CLOUD_FUNCTION_BASE_URL;
+const CLOUD_FUNCTION_BASE_URL = import.meta.env.VITE_CLOUD_FUNCTION_BASE_URL;
 /* --- API FUNCTIONS (UPDATED with Error Handling) --- */
 const translateText = async (text, targetLang) => {
   if (!text || !text.trim() || targetLang === 'English') return { translated: text, error: null };
