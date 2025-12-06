@@ -530,7 +530,7 @@ function LoginScreen({ user }) {
       <div style={{ width: '100%', maxWidth: '440px', padding: 40, background: 'white', borderRadius: 24, boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)' }}>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20, color: '#059669' }}><PolyLogo style={{width:64, height:64}} /></div>
         <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: 8, textAlign: 'center', color: '#111' }}>Poly Chat</h1>
-        <p style={{ color: '#6b7280', marginBottom: 32, textAlign: 'center' }}>Chat without barriers</p>
+        <p style={{ color: '#6b7280', marginBottom: 32, textAlign: 'center' }}>Chat without barriers.</p>
         <form onSubmit={handleJoin} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           <div>
              <label style={{display:'block', fontSize:'0.75rem', fontWeight:700, color:'#9ca3af', marginBottom: 6, textTransform:'uppercase'}}>Display Name</label>
