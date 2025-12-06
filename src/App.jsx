@@ -95,24 +95,22 @@ const LANGUAGES = [
   { code: 'hi-IN', name: 'Hindi', flag: '🇮🇳' },
 ];
 
-const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
-const GEMINI_TTS_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent";
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;;
-
+const CLOUD_FUNCTION_BASE_URL = import.meta.env.CLOUD_FUNCTION_BASE_URL;
 /* --- API FUNCTIONS (UPDATED with Error Handling) --- */
 const translateText = async (text, targetLang) => {
   if (!text || !text.trim() || targetLang === 'English') return { translated: text, error: null };
   try {
-    const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+    const response = await fetch(CLOUD_FUNCTION_BASE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: `Translate to ${targetLang}. Output ONLY text: "${text}"` }] }]
+      body: JSON.stringify({action: 'translate', 
+        text: text, 
+        targetLang: targetLang
       })
     });
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const data = await response.json();
-    return { translated: data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || text, error: null };
+    return { translated: data.translatedText || text, error: data.error || null };
   } catch (error) { 
     console.error("Translation API Error:", error);
     return { translated: text, error: "Translation service failed." };
@@ -122,16 +120,17 @@ const translateText = async (text, targetLang) => {
 const explainText = async (text) => {
   if (!text || !text.trim()) return { result: '', error: null };
   try {
-    const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+    const response = await fetch(CLOUD_FUNCTION_BASE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: `Define "${text}" in English. Format: [Part of Speech] Definition. Max 20 words. No asterisks.` }] }]
+        action: 'explain',
+        text: text,
       })
     });
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const data = await response.json();
-    return { result: data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "No definition found.", error: null };
+    return { result: data.definition || "No definition found.", error: data.error || null };
   } catch (error) { 
     console.error("Definition API Error:", error);
     return { result: "Could not load definition.", error: "Definition service failed." };
@@ -140,17 +139,25 @@ const explainText = async (text) => {
 
 const checkGrammar = async (text, lang) => {
   try {
-    const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+    const response = await fetch(CLOUD_FUNCTION_BASE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: `Analyze sentence in ${lang}: "${text}". If grammar error, return JSON: { "hasError": true, "correction": "Fixed sentence", "reason": "Brief explanation in English (5 words)" }. Else { "hasError": false }.` }] }],
-        generationConfig: { responseMimeType: "application/json" }
+        action: 'checkGrammar',
+        text: text, 
+        lang: lang 
       })
     });
+    // The proxy function returns 200 even if the AI output is malformed JSON, 
+    // so we only check the HTTP status here.
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const data = await response.json();
-    return { ...JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text), error: null };
+    return { 
+        hasError: data.hasError || false, 
+        correction: data.correction || "", 
+        reason: data.reason || "", 
+        error: data.error || null 
+    };
   } catch (err) { 
     console.error("Grammar Check API Error:", err);
     return { hasError: false, error: "Grammar check failed." }; 
@@ -159,18 +166,25 @@ const checkGrammar = async (text, lang) => {
 
 const generateAIResponse = async (userText, userName, lang, context) => {
     try {
-        const prompt = `You are Poly. Chat with ${userName}. Use the following context: ${context}. User said: "${userText}". Lang: ${lang}. Reply in English first, then translate to ${lang}. Return JSON: { "english": "...", "target": "..." }`;
-        const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+        const response = await fetch(CLOUD_FUNCTION_BASE_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: "application/json" }
+          body: JSON.stringify({action: 'generateAIResponse',
+            userText, 
+            userName, 
+            lang, 
+            context
           })
         });
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const data = await response.json();
-        return { response: JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text), error: null };
+        
+        // The proxy sends back an 'error' field if the AI fails to generate valid JSON
+        if (data.error) {
+            return { response: data.response, error: data.error };
+        }
+        
+        return { response: data.response, error: null };
     } catch (err) { 
         console.error("AI Response API Error:", err);
         return { response: null, error: "AI failed to generate response." }; 
@@ -179,34 +193,58 @@ const generateAIResponse = async (userText, userName, lang, context) => {
 
 const playGeminiTTS = async (text, langCode) => {
   try {
-    const response = await fetch(`${GEMINI_TTS_URL}?key=${GEMINI_API_KEY}`, {
+    const response = await fetch(CLOUD_FUNCTION_BASE_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-            contents: [{ parts: [{ text: text }] }],
-            generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } } }
+            action: 'playGeminiTTS',
+            text: text,
+            langCode: langCode
         })
     });
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
-    const data = await response.json();
-    if (data.candidates?.[0]?.content?.parts?.[0]?.inlineData) {
-        const binaryString = window.atob(data.candidates[0].content.parts[0].inlineData.data);
+   const data = await response.json();
+    
+    // Check for error returned by the proxy itself
+    if (data.error) throw new Error(data.error);
+
+    const inlineData = data.inlineData;
+    
+    if (inlineData && inlineData.data) {
+        // The proxy returns the whole inlineData object { mimeType, data (base64) }
+        const binaryString = window.atob(inlineData.data); 
+        
         const bytes = new Uint8Array(binaryString.length);
         for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+        
+        // Simple WAV header creation for the pcm data returned by the API
+        const sampleRate = 24000;
+        const numChannels = 1;
+        const bitsPerSample = 16;
+        const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+        const blockAlign = numChannels * (bitsPerSample / 8);
+        
         const buffer = new ArrayBuffer(44 + bytes.length);
         const view = new DataView(buffer);
+        
         const writeString = (v, o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+        
+        // RIFF header
         writeString(view, 0, 'RIFF'); view.setUint32(4, 36 + bytes.length, true); writeString(view, 8, 'WAVE');
-        writeString(view, 12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
-        view.setUint16(22, 1, true); view.setUint32(24, 24000, true); view.setUint32(28, 48000, true);
-        view.setUint16(32, 2, true); view.setUint16(34, 16, true); writeString(view, 36, 'data');
-        view.setUint32(40, bytes.length, true);
+        // fmt sub-chunk
+        writeString(view, 12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); // Audio format 1 (PCM)
+        view.setUint16(22, numChannels, true); view.setUint32(24, sampleRate, true); view.setUint32(28, byteRate, true);
+        view.setUint16(32, blockAlign, true); view.setUint16(34, bitsPerSample, true); 
+        // data sub-chunk
+        writeString(view, 36, 'data'); view.setUint32(40, bytes.length, true);
+        
         new Uint8Array(buffer, 44).set(bytes);
         new Audio(URL.createObjectURL(new Blob([buffer], { type: 'audio/wav' }))).play();
     }
   } catch (err) { 
       console.error("TTS API Error, falling back to browser TTS:", err);
+      // Fallback to browser TTS
       const u = new SpeechSynthesisUtterance(text); u.lang = langCode; window.speechSynthesis.speak(u);
   }
 };
@@ -915,18 +953,35 @@ function ChatRoom({ user, channelId, targetLang, targetLangCode }) {
     if (isPractice || (channelId === 'ai' && targetLang !== 'English')) {
        const check = await checkGrammar(text, targetLang);
        if (check.error) { finalError = check.error; }
-       if (check.hasError) correctionData = { correction: check.correction, reason: check.reason };
+       if (check.hasError) {
+            correctionData = { 
+                correction: check.correction || text, // Fallback to original text if correction is missing
+                reason: check.reason || "Grammar check found a potential issue." 
+            };
+        }
     }
     
     if (finalError) { setApiError(finalError); return; }
 
-    const msgData = { text, originalText: raw, userId: user.uid, displayName: user.displayName, timestamp: serverTimestamp(), lang: targetLang, langCode: targetLangCode, isPractice, correction: correctionData };
+    // Use null for correction if no error was found, or the structured data
+    const msgData = { 
+      text, 
+      originalText: raw || "", // Safely fallback 'raw' to empty string
+      userId: user.uid, 
+      displayName: user.displayName, 
+      timestamp: serverTimestamp(), 
+      lang: targetLang, 
+      langCode: targetLangCode, 
+      isPractice, 
+      correction: correctionData 
+    };
     
     let ref;
     if (channelId === 'ai') ref = collection(db, 'artifacts', appId, 'users', user.uid, 'ai_messages');
     else ref = collection(db, 'artifacts', appId, 'public', 'data', `chat_${channelId.replace(/[^a-z0-9-_]/g, '')}`);
     
     try {
+        // Save the user's message
         await addDoc(ref, msgData);
     } catch (e) {
         setApiError("Failed to send message to database.");
@@ -937,10 +992,32 @@ function ChatRoom({ user, channelId, targetLang, targetLangCode }) {
        const promptContext = `Topic: ${aiTopic}. Grammar Focus: ${grammarFocus}.`;
        const { response, error } = await generateAIResponse(text, user.displayName, targetLang, promptContext);
 
-       if (error) { setApiError(error); }
+       if (error) { 
+           setApiError(error); 
+           // If AI generation fails, log the error and use a fallback response
+           await addDoc(ref, { 
+                text: "Poly is temporarily unavailable.", 
+                originalText: "Poly is temporarily unavailable.", 
+                userId: 'ai-companion-bot', 
+                displayName: 'Poly', 
+                timestamp: serverTimestamp(), 
+                lang: targetLang, 
+                isBot: true 
+            });
+           return;
+       }
        
        if (response) { 
-            await addDoc(ref, { text: response.target, originalText: response.english, userId: 'ai-companion-bot', displayName: 'Poly', timestamp: serverTimestamp(), lang: targetLang, isBot: true });
+            // ✅ FIX APPLIED HERE: Ensure 'text' and 'originalText' are strings or a message
+            await addDoc(ref, { 
+                text: response.target || "Poly had trouble translating the response.", 
+                originalText: response.english || "Poly had trouble generating the response.", 
+                userId: 'ai-companion-bot', 
+                displayName: 'Poly', 
+                timestamp: serverTimestamp(), 
+                lang: targetLang, 
+                isBot: true 
+            });
        }
     }
   };
@@ -1013,7 +1090,7 @@ function ChatRoom({ user, channelId, targetLang, targetLangCode }) {
                        {msg.originalText && msg.originalText !== msg.text && <span style={{fontStyle:'italic'}}>"{msg.originalText}"</span>}
                        {msg.lang && <span style={{fontWeight:'bold', fontSize:'0.65rem', textTransform:'uppercase'}}>{langFlag} {msg.lang}</span>}
                     </div>
-                    <div className="msg-btn" onClick={() => playGeminiTTS(msg.text, msg.langCode)}><Volume2 size={14}/></div>
+                    <div className="msg-btn" onClick={() => handlePlayAudio(msg.text, msg.langCode, msg.id)}><Volume2 size={14}/></div>
                  </div>
                </div>
              </div>

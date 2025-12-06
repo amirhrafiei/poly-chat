@@ -1,0 +1,37 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global rule requires authentication
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+
+    // 1. USER PROFILES
+    // Path: /artifacts/{appId}/public/data/users/{userId}
+    match /artifacts/poly-local-dev/public/data/users/{userId} {
+      allow read: if true; // Public read is safe for basic profile lookup (search, online status)
+      allow write: if request.auth.uid == userId; // Only owner can write
+    }
+
+    // 2. VOCABULARY & AI CHAT HISTORY (Private Collections)
+    // Path: /artifacts/{appId}/users/{userUid}/...
+    match /artifacts/poly-local-dev/users/{userUid}/{docId} {
+      allow read, write: if request.auth.uid == userUid; // Only owner can access their history
+    }
+
+    // 3. PRIVATE DIRECT MESSAGES (DMs)
+    // Path: /artifacts/poly-local-dev/public/data/{chatId}
+    // {chatId} will capture the entire dm_UID1_UID2 string.
+    match /artifacts/poly-local-dev/public/data/{chatId} {
+        // Step 1: Ensure the user is authenticated (checked globally, but good for clarity).
+        allow read, write: if request.auth != null;
+        
+        // Step 2: Ensure it's a DM chat path (starts with 'chat_dm_')
+        // AND that the user's UID is contained within the chatId.
+        allow read, write: if chatId.matches('^chat_dm_.*') && 
+                            chatId.includes(request.auth.uid);
+    }
+    
+  }
+}
