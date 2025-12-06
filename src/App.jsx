@@ -534,7 +534,6 @@ function MainLayout({ user, userData }) {
     beat(); const i = setInterval(beat, 60000); return () => clearInterval(i);
   }, [user]);
 
-  // ⭐ FIXED: Robust DM Notification Listener
   useEffect(() => {
     if (!user || !user.uid) return;
 
